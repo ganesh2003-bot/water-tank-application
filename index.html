@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Water Tracker</title>
+<style>
+:root{--bg:#eaf6fd;--card:#fff;--text:#0d2b3e;--muted:#5f7a8c;--accent:#0288d1;--accent2:#29b6f6;--track:#d6eefb;--done:#00a37a;--border:#cfe6f3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1a24;--card:#12293a;--text:#e6f3fb;--muted:#8fb0c4;--accent:#4fc3f7;--accent2:#0288d1;--track:#0f2231;--done:#26d0a0;--border:#1d3b50}}
+:root[data-theme="dark"]{--bg:#0b1a24;--card:#12293a;--text:#e6f3fb;--muted:#8fb0c4;--accent:#4fc3f7;--accent2:#0288d1;--track:#0f2231;--done:#26d0a0;--border:#1d3b50}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{text-align:center;margin:8px 0 2px;font-size:2rem;color:var(--accent)}
+.date{text-align:center;color:var(--muted);margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+h2{font-size:1.05rem;margin:0 0 10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center}
+.stats b{display:block;font-size:1.4rem}
+.stats span{color:var(--muted);font-size:.85rem}
+.track{background:var(--track);border-radius:999px;height:32px;overflow:hidden;margin:14px 0 6px}
+.fill{height:100%;min-width:44px;border-radius:999px;background:linear-gradient(90deg,var(--accent2),var(--accent));color:#fff;font-weight:700;text-align:center;line-height:32px;transition:width .6s}
+.fill.done{background:linear-gradient(90deg,#26c6da,var(--done))}
+.btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;padding:12px 8px;background:var(--accent);color:#fff;font-weight:600}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+button:active{transform:scale(.97)}
+.row{display:flex;gap:8px;margin-top:10px}
+input,select{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);flex:1;min-width:0}
+#msg{text-align:center;font-weight:600;padding:14px;border-radius:12px;background:var(--track)}
+#msg.done{background:var(--done);color:#fff;font-size:1.1rem}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+li:last-child{border:0}
+.empty{color:var(--muted)}
+.actions{display:flex;gap:8px;margin-top:10px}
+.actions button{flex:1}
+</style>
+</head>
+<body>
+<main>
+  <h1>💧 My Water Tracker</h1>
+  <div class="date" id="date"></div>
+
+  <div class="card">
+    <div class="stats">
+      <div><b id="consumed">0 L</b><span>Consumed</span></div>
+      <div><b id="remaining">2 L</b><span>Remaining</span></div>
+      <div><b id="goalTxt">2 L</b><span>Daily goal</span></div>
+    </div>
+    <div class="track"><div class="fill" id="fill" style="width:0%">0%</div></div>
+    <div class="date" style="margin:0" id="ml"></div>
+  </div>
+
+  <div id="msg"></div>
+  <div style="height:14px"></div>
+
+  <div class="card">
+    <h2>Add water</h2>
+    <div class="btns">
+      <button data-ml="250">🥛 Glass<br>250 ml</button>
+      <button data-ml="500">🧴 Bottle<br>500 ml</button>
+      <button data-ml="750">🫗 Large<br>750 ml</button>
+    </div>
+    <div class="row">
+      <input id="custom" type="number" min="50" max="2000" step="50" placeholder="Custom ml">
+      <button id="addCustom" style="flex:0 0 auto">Add</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Daily goal</h2>
+    <select id="goal">
+      <option value="1500">1.5 litres</option>
+      <option value="2000" selected>2 litres</option>
+      <option value="2500">2.5 litres</option>
+      <option value="3000">3 litres</option>
+      <option value="3500">3.5 litres</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h2>Today’s log</h2>
+    <ul id="log"></ul>
+    <div class="actions">
+      <button class="ghost" id="undo">↩ Undo last</button>
+      <button class="ghost" id="reset">Reset day</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  var KEY='myWaterTracker.v1';
+  var today=new Date().toISOString().slice(0,10);
+  var state={day:today,goal:2000,log:[]};
+  try{
+    var saved=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(saved&&typeof saved==='object'){
+      state.goal=saved.goal||2000;
+      if(saved.day===today&&Array.isArray(saved.log)){state.log=saved.log}
+    }
+  }catch(e){}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+  var $=function(id){return document.getElementById(id)};
+  var litres=function(ml){return (ml/1000).toFixed(2).replace(/\.?0+$/,'')+' L'};
+  var celebrated=false;
+
+  function render(){
+    var total=state.log.reduce(function(a,e){return a+e.ml},0);
+    var goal=state.goal, rem=Math.max(goal-total,0), pct=Math.min(total/goal,1);
+    $('date').textContent=new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    $('consumed').textContent=litres(total);
+    $('remaining').textContent=litres(rem);
+    $('goalTxt').textContent=litres(goal);
+    $('ml').textContent=total+' ml of '+goal+' ml';
+    var f=$('fill');f.style.width=Math.round(pct*100)+'%';f.textContent=Math.round(pct*100)+'%';
+    f.className='fill'+(total>=goal?' done':'');
+    var m=$('msg'),t;
+    if(total>=goal){t='🎉 Congratulations! You reached your daily water goal. Great job staying hydrated! 💙';m.className='done'}
+    else{m.className='';
+      t=pct>=.75?'🌊 Almost there! Just a little more to go.':pct>=.5?'💪 Halfway done, keep it up!':pct>0?'🚰 Good start! Keep sipping through the day.':'🥤 No water logged yet. Have a glass to get started!'}
+    m.textContent=t;
+    $('goal').value=String(goal);
+    var ul=$('log');ul.innerHTML='';
+    if(!state.log.length){ul.innerHTML='<li class="empty">Nothing logged yet.</li>'}
+    state.log.slice().reverse().forEach(function(e){
+      var li=document.createElement('li');
+      li.innerHTML='<span>'+e.t+'</span><b>'+e.ml+' ml</b>';ul.appendChild(li);
+    });
+    if(total>=goal&&!celebrated){celebrated=true;confetti()}
+    if(total<goal)celebrated=false;
+  }
+  function add(ml){
+    ml=parseInt(ml,10);if(!ml||ml<1)return;
+    state.log.push({ml:ml,t:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+    save();render();
+  }
+  function confetti(){
+    for(var i=0;i<40;i++){
+      var d=document.createElement('div');
+      d.textContent=['💧','🎉','💙'][i%3];
+      d.style.cssText='position:fixed;top:-30px;left:'+Math.random()*100+'vw;font-size:'+(16+Math.random()*16)+'px;pointer-events:none;z-index:9;transition:transform '+(2+Math.random()*2)+'s ease-in,opacity 3s';
+      document.body.appendChild(d);
+      (function(el){setTimeout(function(){el.style.transform='translateY(110vh) rotate(360deg)';el.style.opacity='0'},30);setTimeout(function(){el.remove()},4500)})(d);
+    }
+  }
+  document.querySelectorAll('[data-ml]').forEach(function(b){b.onclick=function(){add(b.dataset.ml)}});
+  $('addCustom').onclick=function(){add($('custom').value);$('custom').value=''};
+  $('goal').onchange=function(){state.goal=parseInt(this.value,10);save();render()};
+  $('undo').onclick=function(){state.log.pop();save();render()};
+  $('reset').onclick=function(){if(confirm('Clear today’s log?')){state.log=[];save();render()}};
+  render();
+})();
+</script>
+</body>
+</html>
